@@ -2,9 +2,9 @@
 
   driver.h - driver code for STM32F4xx ARM processors
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2019-2020 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -42,17 +42,33 @@
 
 #define BITBAND_PERI(x, b) (*((__IO uint8_t *) (PERIPH_BB_BASE + (((uint32_t)(volatile const uint32_t *)&(x)) - PERIPH_BASE)*32 + (b)*4)))
 
+#define timer(p) timerN(p)
+#define timerN(p) TIM ## p
+#define timerINT(p) timeri(p)
+#define timeri(p) TIM ## p ## _IRQn
+#define timerHANDLER(p) timerh(p)
+#define timerh(p) TIM ## p ## _IRQHandler
+
 // Configuration
 // Set value to 1 to enable, 0 to disable
 
 #ifndef USB_SERIAL_CDC
 #define USB_SERIAL_CDC      0 // for UART comms
 #endif
+#ifndef ESTOP_ENABLE
+#define ESTOP_ENABLE        0
+#endif
 #ifndef SDCARD_ENABLE
 #define SDCARD_ENABLE       0
 #endif
 #ifndef KEYPAD_ENABLE
 #define KEYPAD_ENABLE       0
+#endif
+#ifndef ODOMETER_ENABLE
+#define ODOMETER_ENABLE     0
+#endif
+#ifndef PPI_ENABLE
+#define PPI_ENABLE       	0
 #endif
 #ifndef EEPROM_ENABLE
 #define EEPROM_ENABLE       0
@@ -93,10 +109,38 @@
 
 // Define timer allocations.
 
-#define SPINDLE_PWM_TIMER TIM1
-#define STEPPER_TIMER TIM2
-#define PULSE_TIMER TIM3
-#define DEBOUNCE_TIMER TIM4
+#define STEPPER_TIMER_N             5
+#define STEPPER_TIMER               timer(STEPPER_TIMER_N)
+#define STEPPER_TIMER_IRQn          timerINT(STEPPER_TIMER_N)
+#define STEPPER_TIMER_IRQHandler    timerHANDLER(STEPPER_TIMER_N)
+
+#define PULSE_TIMER_N               4
+#define PULSE_TIMER                 timer(PULSE_TIMER_N)
+#define PULSE_TIMER_IRQn            timerINT(PULSE_TIMER_N)
+#define PULSE_TIMER_IRQHandler      timerHANDLER(PULSE_TIMER_N)
+
+#define SPINDLE_PWM_TIMER_N         1
+#define SPINDLE_PWM_TIMER           timer(SPINDLE_PWM_TIMER_N)
+
+#define DEBOUNCE_TIMER_N            9
+#define DEBOUNCE_TIMER              timer(DEBOUNCE_TIMER_N)
+#define DEBOUNCE_TIMER_IRQn         TIM1_BRK_TIM9_IRQn       // !
+#define DEBOUNCE_TIMER_IRQHandler   TIM1_BRK_TIM9_IRQHandler // !
+
+#define RPM_COUNTER_N               3
+#define RPM_COUNTER                 timer(RPM_COUNTER_N)
+#define RPM_COUNTER_IRQn            timerINT(RPM_COUNTER_N)
+#define RPM_COUNTER_IRQHandler      timerHANDLER(RPM_COUNTER_N)
+
+#define RPM_TIMER_N                 2
+#define RPM_TIMER                   timer(RPM_TIMER_N)
+#define RPM_TIMER_IRQn              timerINT(RPM_TIMER_N)
+#define RPM_TIMER_IRQHandler        timerHANDLER(RPM_TIMER_N)
+
+#define PPI_TIMER_N                 2
+#define PPI_TIMER                   timer(PPI_TIMER_N)
+#define PPI_TIMER_IRQn              timerINT(PPI_TIMER_N)
+#define PPI_TIMER_IRQHandler        timerHANDLER(PPI_TIMER_N)
 
 #ifdef BOARD_CNC_BOOSTERPACK
   #if N_AXIS > 3
@@ -112,6 +156,14 @@
   #include "protoneer_3.xx_map.h"
 #elif defined(BOARD_GENERIC_UNO)
   #include "uno_map.h"
+#elif defined(BOARD_MORPHO_CNC)
+  #include "st_morpho_map.h"
+#elif defined(BOARD_MORPHO_DAC_CNC)
+  #include "st_morpho_dac_map.h"
+#elif defined(BOARD_MINI_BLACKPILL)
+  #include "mini_blackpill_map.h"
+#elif defined(BOARD_MY_MACHINE)
+  #include "my_machine_map.h"
 #else // default board
   #include "generic_map.h"
 #endif
@@ -131,39 +183,41 @@
 #define FLASH_ENABLE 0
 #endif
 
+#if SPINDLE_HUANYANG
+#include "spindle/huanyang.h"
+#endif
+
+#ifndef VFD_SPINDLE
+#define VFD_SPINDLE 0
+#endif
+
+#ifdef MODBUS_ENABLE
+#define SERIAL2_MOD
+#endif
+
 #if EEPROM_ENABLE|| KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
-  #ifdef NUCLEO_F411
-    #define I2C_PORT 1
+  #if defined(NUCLEO_F411) || defined(NUCLEO_F446)
+    #define I2C_PORT 1 // GPIOB, SCL_PIN = 8, SDA_PIN = 9
   #else
-    #define I2C_PORT 2
+    #define I2C_PORT 2 // GPIOB, SCL_PIN = 10, SDA_PIN = 11
   #endif
 #endif
 
-#if TRINAMIC_ENABLE || KEYPAD_ENABLE
-#define DRIVER_SETTINGS
-#endif
-
-#ifdef DRIVER_SETTINGS
-
 #if TRINAMIC_ENABLE
-#include "tmc2130/trinamic.h"
-#endif
-
-typedef struct {
-#if TRINAMIC_ENABLE
-    trinamic_settings_t trinamic;
-#endif
-#if KEYPAD_ENABLE
-    jog_settings_t jog;
-#endif
-} driver_settings_t;
-
-extern driver_settings_t driver_settings;
-
+  #include "motors/trinamic.h"
+  #ifndef TRINAMIC_MIXED_DRIVERS
+    #define TRINAMIC_MIXED_DRIVERS 1
+  #endif
+  #if TRINAMIC_ENABLE == 2209
+    #ifdef MODBUS_ENABLE
+      #error "Cannot use TMC2209 drivers with Modbus spindle!"
+    #else
+      #define SERIAL2_MOD
+    #endif
+  #endif
 #endif
 
 // End configuration
-
 
 #if KEYPAD_ENABLE && !defined(KEYPAD_PORT)
 #error Keypad plugin not supported!
@@ -171,10 +225,6 @@ extern driver_settings_t driver_settings;
 
 #if SDCARD_ENABLE && !defined(SD_CS_PORT)
 #error SD card plugin not supported!
-#endif
-
-#if TRINAMIC_ENABLE && CNC_BOOSTERPACK == 0
-#error Trinamic plugin not supported!
 #endif
 
 bool driver_init (void);

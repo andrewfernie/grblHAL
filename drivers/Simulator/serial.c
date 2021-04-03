@@ -22,10 +22,12 @@
 
 */
 
+#include <string.h>
+
 #include "mcu.h"
 #include "simulator.h"
 
-#include "grbl/grbl.h"
+#include "grbl/hal.h"
 
 static stream_tx_buffer_t txbuffer = {0};
 static stream_rx_buffer_t rxbuffer = {0}, rxbackup;
@@ -56,7 +58,7 @@ int16_t serialGetC (void)
     return data;
 }
 
-inline uint16_t serialRxCount (void)
+static inline uint16_t serialRxCount (void)
 {
     uint_fast16_t head = rxbuffer.head, tail = rxbuffer.tail;
 

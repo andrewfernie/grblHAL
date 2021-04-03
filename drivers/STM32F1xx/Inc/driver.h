@@ -2,9 +2,9 @@
 
   driver.h - driver code for STM32F103C8 ARM processors
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2019-2020 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -53,6 +53,9 @@
 #endif
 #ifndef KEYPAD_ENABLE
 #define KEYPAD_ENABLE       0
+#endif
+#ifndef ODOMETER_ENABLE
+#define ODOMETER_ENABLE     0
 #endif
 #ifndef EEPROM_ENABLE
 #define EEPROM_ENABLE       0
@@ -107,6 +110,8 @@
     #error EEPROM plugin not supported!
   #endif
   #include "cnc3040_map.h"
+#elif defined(BOARD_MY_MACHINE)
+  #include "my_machine_map.h"
 #else // default board
   #include "generic_map.h"
 #endif
@@ -120,6 +125,14 @@
 
 // End configuration
 
+#if TRINAMIC_ENABLE
+#ifndef TRINAMIC_MIXED_DRIVERS
+#define TRINAMIC_MIXED_DRIVERS 1
+#endif
+#include "motors/trinamic.h"
+#include "trinamic/common.h"
+#endif
+
 #if EEPROM_ENABLE == 0
 #define FLASH_ENABLE 1
 #else
@@ -128,27 +141,6 @@
 
 #if EEPROM_ENABLE|| KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
 #define I2C_PORT
-#endif
-
-#if TRINAMIC_ENABLE || KEYPAD_ENABLE
-#define DRIVER_SETTINGS
-#endif
-
-#ifdef DRIVER_SETTINGS
-
-#include "tmc2130/trinamic.h"
-
-typedef struct {
-#if TRINAMIC_ENABLE
-    trinamic_settings_t trinamic;
-#endif
-#if KEYPAD_ENABLE
-    jog_settings_t jog;
-#endif
-} driver_settings_t;
-
-extern driver_settings_t driver_settings;
-
 #endif
 
 #if KEYPAD_ENABLE && !defined(KEYPAD_PORT)

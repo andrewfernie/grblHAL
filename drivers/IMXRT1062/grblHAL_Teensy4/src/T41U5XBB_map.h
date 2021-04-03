@@ -1,7 +1,7 @@
 /*
   T41U5XBB_map.h - driver code for IMXRT1062 processor (on Teensy 4.1 board)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Board by Phil Barrett: https://github.com/phil-barrett/grblHAL-teensy-4.x
 
@@ -22,6 +22,9 @@
 */
 
 #define BOARD_NAME "T41U5XBB"
+#define HAS_BOARD_INIT
+
+void board_init (void);
 
 #if N_AXIS > 5
 #error Max number of axes is 5 for T41U5XBB
@@ -112,13 +115,26 @@
 #define PROBE_PIN           (15U)
 
 // Define auxillary input pins
-#define AUXINPUT0_PIN       (30U)
-#define AUXINPUT1_PIN       (36U)
-#define AUXINPUT2_PIN       (34U)
-#define AUXINPUT3_PIN       (35U)
+#define AUXINPUT0_PIN       (36u) // ST0
+#if !QEI_ENABLE
+#define AUXINPUT1_PIN       (30u) // ST1
+#define AUXINPUT2_PIN       (34u) // ST2
+#define AUXINPUT3_PIN       (35u) // ST3
+#define AUX_N_IN 4
+#define AUX_IN_MASK 0b1111
+#else
+#define AUX_N_IN 1
+#define AUX_IN_MASK 0b1
+#endif
+
+#define AUXOUTPUT0_PIN      (31u) // AUX0
+#define AUXOUTPUT1_PIN      (32u) // AUX1
+#define AUXOUTPUT2_PIN      (33u) // AUX2
+#define AUX_N_OUT 3
+#define AUX_OUT_MASK 0b111
 
 #if KEYPAD_ENABLE
-#define KEYPAD_STROBE_PIN   (41U)
+#define KEYPAD_STROBE_PIN   (41u) // I2C ST
 #endif
 
 #if EEPROM_ENABLE || KEYPAD_ENABLE
@@ -128,8 +144,7 @@
 #endif
 
 #if QEI_ENABLE
-#define QEI_A_PIN      (30)
-#define QEI_B_PIN      (34)
-// #define QEI_INDEX_PIN  GPIO2_PIN
-#define QEI_SELECT_PIN (35u)
+#define QEI_A_PIN      (30u) // ST1
+#define QEI_B_PIN      (34u) // ST2
+#define QEI_SELECT_PIN (35u) // ST3
 #endif

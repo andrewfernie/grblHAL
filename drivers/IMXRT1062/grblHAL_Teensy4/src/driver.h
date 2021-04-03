@@ -1,9 +1,9 @@
 /*
   driver.h - driver code for IMXRT1062 processor (on Teensy 4.0 board)
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -37,6 +37,10 @@
 #include "grbl/hal.h"
 #include "grbl/nuts_bolts.h"
 
+
+#define DIGITAL_IN(gpio) (!!(gpio.reg->DR & gpio.bit))
+#define DIGITAL_OUT(gpio, on) { if(on) gpio.reg->DR_SET = gpio.bit; else gpio.reg->DR_CLEAR = gpio.bit; }
+
 #if USB_SERIAL_CDC > 0
 //#define UART_DEBUG // For development only - enable only with USB_SERIAL_CDC enabled and SPINDLE_HUANYANG disabled
 #endif
@@ -49,6 +53,9 @@
 #endif
 #ifndef PLASMA_ENABLE
 #define PLASMA_ENABLE       0
+#endif
+#ifndef PPI_ENABLE
+#define PPI_ENABLE          0
 #endif
 #ifndef SPINDLE_HUANYANG
 #define SPINDLE_HUANYANG    0
@@ -132,6 +139,19 @@
 #endif
 #endif
 
+// Timer assignments (for reference, Arduino libs does not follow the CMSIS style...)
+
+//#define STEPPER_TIMER     PIT0 (32 bit)
+//#define PULSE_TIMER       TMR4
+//#define SPINDLE_PWM_TIMER TMR1 (pin 12) or TMR2 (pin 3)
+//#define DEBOUNCE_TIMER    TMR3
+//#define PLASMA_TIMER      TMR2
+//#define PPI_TIMER         inverse of SPINDLE_PWM_TIMER
+
+// Timers used for spindle encoder if spindle sync is enabled:
+//#define RPM_TIMER         GPT1
+//#define RPM_COUNTER       GPT2
+
 // End configuration
 
 #ifdef BOARD_CNC_BOOSTERPACK
@@ -140,8 +160,22 @@
   #include "T40X101_map.h"
 #elif defined(BOARD_T41U5XBB)
   #include "T41U5XBB_map.h"
+#elif defined(BOARD_T41U5XSS)
+  #include "T41U5XSS_map.h"
+#elif defined(BOARD_T41PROBB)
+  #include "T41ProBB_map.h"
+#elif defined(BOARD_MY_MACHINE)
+  #include "my_machine_map.h"
 #else // default board
 #include "generic_map.h"
+#endif
+
+#if SPINDLEPWMPIN == 12
+#define PPI_TIMER       (IMXRT_TMR2)
+#define PPI_TIMERIRQ    IRQ_QTIMER2
+#else
+#define PPI_TIMER       (IMXRT_TMR1)
+#define PPI_TIMERIRQ    IRQ_QTIMER1
 #endif
 
 // Adjust STEP_PULSE_LATENCY to get accurate step pulse length when required, e.g if using high step rates.
@@ -186,32 +220,6 @@
 #include "odometer/odometer.h"
 #endif
 
-#if TRINAMIC_ENABLE || KEYPAD_ENABLE || ETHERNET_ENABLE || QEI_ENABLE || PLASMA_ENABLE || ODOMETER_ENABLE
-
-#define DRIVER_SETTINGS
-
-typedef struct {
-#if ETHERNET_ENABLE
-    network_settings_t network;
-#endif
-#if TRINAMIC_ENABLE
-    trinamic_settings_t trinamic;
-#endif
-#if KEYPAD_ENABLE
-    jog_settings_t jog;
-#endif
-#if QEI_ENABLE
-    encoder_settings_t encoder[QEI_ENABLE];
-#endif
-#if PLASMA_ENABLE
-    plasma_settings_t plasma;
-#endif
-} driver_settings_t;
-
-extern driver_settings_t driver_settings;
-
-#endif
-
 #if KEYPAD_ENABLE && !defined(KEYPAD_STROBE_PIN)
 #error "KEYPAD_ENABLE requires KEYPAD_STROBE_PIN to be defined!"
 #endif
@@ -243,6 +251,7 @@ typedef enum {
     Input_FeedHold,
     Input_CycleStart,
     Input_SafetyDoor,
+    Input_LimitsOverride,
     Input_EStop,
     Input_ModeSelect,
     Input_LimitX,
@@ -262,6 +271,7 @@ typedef enum {
     Input_QEI_B,
     Input_QEI_Select,
     Input_QEI_Index,
+    Input_SpindleIndex,
     Input_Aux0,
     Input_Aux1,
     Input_Aux2,

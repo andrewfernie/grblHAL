@@ -1,7 +1,7 @@
 /*
   i2c.c - driver code for IMXRT1062 processor (on Teensy 4.0 board)
 
-  Part of GrblHAL
+  Part of grblHAL
 
   Some parts of this code is Copyright (c) 2020 Terje Io
 
@@ -94,7 +94,7 @@ static const i2c_hardware_t i2c4_hardware = {
     }
 };
 
-static bool force_clock (i2c_hardware_t *hardware)
+static bool force_clock (const i2c_hardware_t *hardware)
 {
     bool ret = false;
     uint32_t sda_pin = hardware->sda_pin.pin;
@@ -127,7 +127,7 @@ static bool force_clock (i2c_hardware_t *hardware)
     return ret;
 }
 
-static void setClock (IMXRT_LPI2C_t *port, uint32_t frequency)
+static void set_clock (IMXRT_LPI2C_t *port, uint32_t frequency)
 {
     port->MCR = 0;
 
@@ -172,8 +172,8 @@ typedef enum {
 typedef struct {
     volatile i2c_state_t state;
     uint8_t addr;
-    volatile uint8_t count;
-    volatile uint8_t rcount;
+    volatile uint16_t count;
+    volatile uint16_t rcount;
     volatile uint8_t acount;
     uint8_t *data;
     uint8_t regaddr[2];
@@ -219,7 +219,7 @@ void i2c_init (void)
         *hardware->clock_gate_register |= hardware->clock_gate_mask;
         port->MCR = LPI2C_MCR_RST;
 
-        setClock(port, 100000);
+        set_clock(port, 100000);
 
         // Setup SDA register
         *(portControlRegister(hardware->sda_pin.pin)) = PINCONFIG;
@@ -238,8 +238,24 @@ void i2c_init (void)
     }
 }
 
+// wait until ready for transfer, try peripheral reset if bus hangs
+inline static bool wait_ready (void)
+{
+    while(i2cIsBusy) {
+        if(port->MSR & LPI2C_MSR_PLTF) {
+            if(force_clock(hardware)) {
+                port->MCR = LPI2C_MCR_RST;
+                set_clock(port, 100000);
+            } else
+                return false;
+        }
+    }
+
+    return true;
+}
+
 // get bytes (max 8 if local buffer, else max 255), waits for result
-uint8_t *I2C_Receive (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool block)
+uint8_t *I2C_Receive (uint32_t i2cAddr, uint8_t *buf, uint16_t bytes, bool block)
 {
     i2c.data  = buf ? buf : i2c.buffer;
     i2c.count = bytes;
@@ -257,7 +273,7 @@ uint8_t *I2C_Receive (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool block)
     return i2c.buffer;
 }
 
-void I2C_Send (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool block)
+void I2C_Send (uint32_t i2cAddr, uint8_t *buf, uint16_t bytes, bool block)
 {
     i2c.count = bytes;
     i2c.data  = buf ? buf : i2c.buffer;
@@ -278,7 +294,7 @@ void I2C_Send (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool block)
         while(i2cIsBusy);
 }
 
-uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint8_t abytes, uint8_t bytes, bool block)
+uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint8_t abytes, uint16_t bytes, bool block)
 {
     while(i2cIsBusy);
 
@@ -301,33 +317,35 @@ uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint8_t abytes, uint8
 
 #if EEPROM_ENABLE
 
-void i2c_eeprom_transfer (i2c_eeprom_trans_t *eeprom, bool read)
+nvs_transfer_result_t i2c_nvs_transfer (nvs_transfer_t *transfer, bool read)
 {
-    static uint8_t txbuf[66];
+    static uint8_t txbuf[NVS_SIZE + 2];
 
     while(i2cIsBusy);
 
     if(read) {
-        if(eeprom->word_addr_bytes == 1)
-            i2c.regaddr[0] = eeprom->word_addr;
+        if(transfer->word_addr_bytes == 1)
+            i2c.regaddr[0] = transfer->word_addr;
         else {
-            i2c.regaddr[0] = eeprom->word_addr & 0xFF;
-            i2c.regaddr[1] = eeprom->word_addr >> 8;
+            i2c.regaddr[0] = transfer->word_addr & 0xFF;
+            i2c.regaddr[1] = transfer->word_addr >> 8;
         }
-        I2C_ReadRegister(eeprom->address, eeprom->data, eeprom->word_addr_bytes, eeprom->count, true);
+        I2C_ReadRegister(transfer->address, transfer->data, transfer->word_addr_bytes, transfer->count, true);
     } else {
-        memcpy(&txbuf[eeprom->word_addr_bytes], eeprom->data, eeprom->count);
-        if(eeprom->word_addr_bytes == 1)
-            txbuf[0] = eeprom->word_addr;
+        memcpy(&txbuf[transfer->word_addr_bytes], transfer->data, transfer->count);
+        if(transfer->word_addr_bytes == 1)
+            txbuf[0] = transfer->word_addr;
         else {
-            txbuf[0] = eeprom->word_addr >> 8;
-            txbuf[1] = eeprom->word_addr & 0xFF;
+            txbuf[0] = transfer->word_addr >> 8;
+            txbuf[1] = transfer->word_addr & 0xFF;
         }
-        I2C_Send(eeprom->address, txbuf, eeprom->count + eeprom->word_addr_bytes, true);
+        I2C_Send(transfer->address, txbuf, transfer->count + transfer->word_addr_bytes, true);
 #if !EEPROM_IS_FRAM
         hal.delay_ms(7, NULL);
 #endif
     }
+
+    return NVS_TransferResult_OK;
 }
 
 #endif
@@ -336,11 +354,10 @@ void i2c_eeprom_transfer (i2c_eeprom_trans_t *eeprom, bool read)
 
 void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback)
 {
-    while(i2cIsBusy);
-
-    i2c.keycode_callback = callback;
-
-    I2C_Receive(i2cAddr, NULL, 1, false);
+    if(wait_ready()) {
+        i2c.keycode_callback = callback;
+        I2C_Receive(i2cAddr, NULL, 1, false);
+    }
 }
 
 #endif
@@ -502,7 +519,9 @@ hal.stream.write(ASCII_EOL);
             }
           #endif
             break;
-default: break;
+
+        default:
+            break;
     }
 }
 

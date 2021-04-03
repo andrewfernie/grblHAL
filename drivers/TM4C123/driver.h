@@ -3,9 +3,9 @@
 
   Grbl driver code for Texas Instruments Tiva C (TM4C123GH6PM) ARM processor
 
-  Part of Grbl
+  Part of grblHAL
 
-  Copyright (c) 2016-2020 Terje Io
+  Copyright (c) 2016-2021 Terje Io
   Copyright (c) 2011-2015 Sungeun K. Jeon
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
@@ -46,8 +46,8 @@
 #ifndef KEYPAD_ENABLE
 #define KEYPAD_ENABLE           0
 #endif
-#ifndef LASER_PPI
-#define LASER_PPI               0
+#ifndef PPI_ENABLE
+#define PPI_ENABLE              0
 #endif
 #ifndef TRINAMIC_ENABLE
 #define TRINAMIC_ENABLE         0
@@ -109,6 +109,8 @@
 
 #ifdef BOARD_CNC_BOOSTERPACK
 #include "cnc_boosterpack_map.h"
+#elif defined(BOARD_MY_MACHINE)
+#include "my_machine_map.h"
 #else
 #error No board!
 #endif
@@ -120,50 +122,27 @@
 #define STEP_PULSE_LATENCY 1.3f // microseconds
 #endif
 
+#if KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
+#define I2C_ENABLE 1
+#else
+#define I2C_ENABLE 0
+#endif
+
 // End configuration
 
-#if TRINAMIC_ENABLE || KEYPAD_ENABLE
-#define DRIVER_SETTINGS
-#endif
-
-#ifdef DRIVER_SETTINGS
-
 #if TRINAMIC_ENABLE
-#include "tmc2130/trinamic.h"
+#ifndef TRINAMIC_MIXED_DRIVERS
+#define TRINAMIC_MIXED_DRIVERS 1
+#endif
+#include "motors/trinamic.h"
+#include "trinamic/common.h"
 #endif
 
-typedef struct {
-#if TRINAMIC_ENABLE
-    trinamic_settings_t trinamic;
-#endif
-#if KEYPAD_ENABLE
-    jog_settings_t jog;
-#endif
-} driver_settings_t;
-
-extern driver_settings_t driver_settings;
-
-#endif
-
-
-#if LASER_PPI
-
-#define LASER_PPI_TIM TIMER2
-#define LASER_PPI_TIMER_PERIPH timerPeriph(LASER_PPI_TIM)
-#define LASER_PPI_TIMER_BASE timerBase(LASER_PPI_TIM)
-#define LASER_PPI_TIMER_INT timerINT(LASER_PPI_TIM, A)
-
-typedef struct {
-    float ppi;
-    uint_fast16_t steps_per_pulse;
-    uint_fast16_t pulse_length; // uS
-    uint32_t next_pulse;
-} laser_ppi_t;
-
-extern laser_ppi_t laser;
-
-void laser_ppi_mode (bool on);
-
+#if PPI_ENABLE
+#define PPI_ENABLE_TIM TIMER2
+#define PPI_ENABLE_TIMER_PERIPH timerPeriph(PPI_ENABLE_TIM)
+#define PPI_ENABLE_TIMER_BASE timerBase(PPI_ENABLE_TIM)
+#define PPI_ENABLE_TIMER_INT timerINT(PPI_ENABLE_TIM, A)
 #endif
 
 #endif

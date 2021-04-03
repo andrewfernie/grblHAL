@@ -2,9 +2,9 @@
 
   driver.h - configuration file for Texas Instruments MSP432 ARM processor
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2017-2020 Terje Io
+  Copyright (c) 2017-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -46,8 +46,10 @@
 #define NO_MSP_CLASSIC_DEFINES
 
 // Configuration
-// Set value to 1 to enable, 0 to disable
 
+#ifndef PLASMA_ENABLE
+#define PLASMA_ENABLE           0
+#endif
 #ifndef SPINDLE_HUANYANG
 #define SPINDLE_HUANYANG        0
 #endif
@@ -74,6 +76,9 @@
 #endif
 #ifndef CNC_BOOSTERPACK_A4998
 #define CNC_BOOSTERPACK_A4998   0
+#endif
+#ifndef LIMITS_OVERRIDE_ENABLE
+#define LIMITS_OVERRIDE_ENABLE  0
 #endif
 
 #define CNC_BOOSTERPACK         0
@@ -102,6 +107,8 @@
 
 #ifdef BOARD_CNC_BOOSTERPACK
 #include "cnc_boosterpack_map.h"
+#elif defined(BOARD_MY_MACHINE)
+#include "my_machine_map.h"
 #else
 #error "No board!"
 #endif
@@ -119,34 +126,27 @@
 #include "spindle/huanyang.h"
 #endif
 
-#if TRINAMIC_ENABLE
-#include "tmc2130/trinamic.h"
+#if TRINAMIC_ENABLE && CNC_BOOSTERPACK_A4998 == 0
+#undef CNC_BOOSTERPACK_A4998
+#define CNC_BOOSTERPACK_A4998 1
 #endif
 
-#if TRINAMIC_ENABLE || KEYPAD_ENABLE || defined(SPINDLE_RPM_PIECES)
-#define DRIVER_SETTINGS
+#if TRINAMIC_ENABLE
+#ifndef TRINAMIC_MIXED_DRIVERS
+#define TRINAMIC_MIXED_DRIVERS 1
+#endif
+#include "motors/trinamic.h"
+#include "trinamic/common.h"
+#endif
+
+#if PLASMA_ENABLE
+#include "plasma/thc.h"
 #endif
 
 #if (TRINAMIC_ENABLE && TRINAMIC_I2C) || ATC_ENABLE || EEPROM_ENABLE
-#define USE_I2C
-#endif
-
-#ifdef DRIVER_SETTINGS
-
-typedef struct {
-
-#if TRINAMIC_ENABLE
-    trinamic_settings_t trinamic;
-#endif
-
-#if KEYPAD_ENABLE
-    jog_settings_t jog;
-#endif
-
-} driver_settings_t;
-
-extern driver_settings_t driver_settings;
-
+#define I2C_ENABLE 1
+#else
+#define I2C_ENABLE 1
 #endif
 
 #define port(p) portI(p)
@@ -227,5 +227,6 @@ extern driver_settings_t driver_settings;
 // Driver initialization entry point
 
 bool driver_init (void);
+uint32_t xTaskGetTickCount();
 
 #endif // __DRIVER_H__

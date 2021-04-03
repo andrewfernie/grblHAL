@@ -1,9 +1,9 @@
 /*
   generic_map.h - driver code for STM32F4xx ARM processors
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2020 Terje Io
+  Copyright (c) 2020-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -19,11 +19,15 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#if TRINAMIC_ENABLE
+#error Trinamic plugin not supported!
+#endif
+
 // Define step pulse output pins.
 #define STEP_PORT       GPIOA
 #define X_STEP_PIN      0
 #define Y_STEP_PIN      1
-#define Z_STEP_PIN      10
+#define Z_STEP_PIN      3
 #define X_STEP_BIT      (1<<X_STEP_PIN)
 #define Y_STEP_BIT      (1<<Y_STEP_PIN)
 #define Z_STEP_BIT      (1<<Z_STEP_PIN)
@@ -100,15 +104,19 @@
 // Define user-control controls (cycle start, reset, feed hold) input pins.
 #define CONTROL_PORT                GPIOB
 #define CONTROL_RESET_PIN           5
-#define CONTROL_FEED_HOLD_PIN       6
-#define CONTROL_CYCLE_START_PIN     7
-#define CONTROL_SAFETY_DOOR_PIN     8
-#define CONTROL_INMODE GPIO_SHIFT5
 #define CONTROL_RESET_BIT           (1<<CONTROL_RESET_PIN)
+#define CONTROL_FEED_HOLD_PIN       6
 #define CONTROL_FEED_HOLD_BIT       (1<<CONTROL_FEED_HOLD_PIN)
+#define CONTROL_CYCLE_START_PIN     7
 #define CONTROL_CYCLE_START_BIT     (1<<CONTROL_CYCLE_START_PIN)
+#ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
+#define CONTROL_SAFETY_DOOR_PIN     8
 #define CONTROL_SAFETY_DOOR_BIT     (1<<CONTROL_SAFETY_DOOR_PIN)
 #define CONTROL_MASK                (CONTROL_RESET_BIT|CONTROL_FEED_HOLD_BIT|CONTROL_CYCLE_START_BIT|CONTROL_SAFETY_DOOR_BIT)
+#else
+#define CONTROL_MASK                (CONTROL_RESET_BIT|CONTROL_FEED_HOLD_BIT|CONTROL_CYCLE_START_BIT)
+#endif
+#define CONTROL_INMODE GPIO_SHIFT5
 
 // Define probe switch input pin.
 #define PROBE_PORT                  GPIOA
@@ -125,13 +133,5 @@
 #define SD_CS_PORT  GPIOA
 #define SD_CS_PIN   3
 #define SD_CS_BIT   (1<<SD_CS_PIN)
-// The following defines are not used but defined for reference
-// Port init and remap is done by HAL_SPI_MspInit() in stm32f1xx_hal_msp.c
-#define SD_IO_PORT  GPIOB
-#define SD_SCK_PIN  3
-#define SD_SCK_BIT  (1<<SD_SCK_PIN)
-#define SD_MISO_PIN 4
-#define SD_MISO_BIT (1<<SD_MISO_PIN)
-#define SD_MOSI_PIN 5
-#define SD_MOSI_BIT (1<<SD_MOSI_PIN)
+#define SPI_PORT    1 // GPIOA, SCK_PIN = 5, MISO_PIN = 6, MOSI_PIN = 7
 #endif

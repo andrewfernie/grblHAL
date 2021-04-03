@@ -3,9 +3,9 @@
 
   Driver code for Atmel SAM3X8E ARM processor
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2019-2020 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,7 +23,7 @@
 
 #include "driver.h"
 
-#ifdef I2C_PERIPH
+#if I2C_ENABLE
 
 #include <Arduino.h>
 
@@ -50,7 +50,7 @@ typedef enum {
 typedef struct {
     volatile i2c_state_t state;
     uint8_t addr;
-    uint8_t count;
+    uint16_t count;
     uint8_t *data;
 #if KEYPAD_ENABLE
     keycode_callback_ptr keycode_callback;
@@ -96,7 +96,7 @@ void i2c_init (void)
 }
 
 // get bytes (max 8), waits for result
-uint8_t *I2C_Receive (uint32_t i2cAddr, uint8_t *buf, uint32_t bytes, bool block)
+uint8_t *I2C_Receive (uint32_t i2cAddr, uint8_t *buf, uint16_t bytes, bool block)
 {
     i2c.data  = buf ? buf : i2c.buffer;
     i2c.count = bytes;
@@ -113,7 +113,7 @@ uint8_t *I2C_Receive (uint32_t i2cAddr, uint8_t *buf, uint32_t bytes, bool block
     return i2c.buffer;
 }
 
-void I2C_Send (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool block)
+void I2C_Send (uint32_t i2cAddr, uint8_t *buf, uint16_t bytes, bool block)
 {
     i2c.count = bytes;
     i2c.data  = buf ? buf : i2c.buffer;
@@ -127,7 +127,7 @@ void I2C_Send (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool block)
         while(i2cIsBusy);
 }
 
-uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool block)
+uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint16_t bytes, bool block)
 {
     while(i2cIsBusy);
 
@@ -148,23 +148,25 @@ uint8_t *I2C_ReadRegister (uint32_t i2cAddr, uint8_t *buf, uint8_t bytes, bool b
 
 #if EEPROM_ENABLE
 
-void i2c_eeprom_transfer (i2c_eeprom_trans_t *eeprom, bool read)
+nvs_transfer_result_t i2c_nvs_transfer (nvs_transfer_t *transfer, bool read)
 {
     static uint8_t txbuf[34];
 
     while(i2cIsBusy);
 
     if(read) {
-        eeprom->data[0] = eeprom->word_addr; // !!
-        I2C_ReadRegister(eeprom->address, eeprom->data, eeprom->count, true);
+        transfer->data[0] = transfer->word_addr; // !!
+        I2C_ReadRegister(transfer->address, transfer->data, transfer->count, true);
     } else {
-        memcpy(&txbuf[1], eeprom->data, eeprom->count);
-        txbuf[0] = eeprom->word_addr;
-        I2C_Send(eeprom->address, txbuf, eeprom->count, true);
+        memcpy(&txbuf[1], transfer->data, transfer->count);
+        txbuf[0] = transfer->word_addr;
+        I2C_Send(transfer->address, txbuf, transfer->count, true);
 #if !EEPROM_IS_FRAM
         hal.delay_ms(5, NULL);
 #endif
     }
+
+    return NVS_TransferResult_OK;
 }
 
 #endif
@@ -182,14 +184,14 @@ void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback)
 
 #endif
 
-#if TRINAMIC_ENABLE && TRINAMIC_I2C
+#if TRINAMIC_ENABLE == 2130 && TRINAMIC_I2C
 
 static TMC2130_status_t I2C_TMC_ReadRegister (TMC2130_t *driver, TMC2130_datagram_t *reg)
 {
     uint8_t *res, i2creg;
     TMC2130_status_t status = {0};
 ;
-    if((i2creg = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->cs_pin : 0), reg->addr).value) == 0xFF)
+    if((i2creg = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->axis : 0), reg->addr).value) == 0xFF)
         return status; // unsupported register
 
     while(i2cIsBusy);
@@ -218,7 +220,7 @@ static TMC2130_status_t I2C_TMC_WriteRegister (TMC2130_t *driver, TMC2130_datagr
     while(i2cIsBusy);
 
     reg->addr.write = 1;
-    i2c.buffer[0] = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->cs_pin : 0), reg->addr).value;
+    i2c.buffer[0] = TMCI2C_GetMapAddress((uint8_t)(driver ? (uint32_t)driver->axis : 0), reg->addr).value;
     reg->addr.write = 0;
 
     if(i2c.buffer[0] == 0xFF)

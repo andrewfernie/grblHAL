@@ -2,9 +2,9 @@
 
   serial.c - serial port implementation for STM32F103C8 ARM processors
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2019-2020 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -29,8 +29,10 @@
 
 #include "main.h"
 
+#if !USB_SERIAL_CDC
+
 static stream_rx_buffer_t rxbuf = {0};
-static stream_tx_buffer_t txbuf = {0}, rxbackup;
+static stream_tx_buffer_t txbuf = {0};
 
 void serialInit (void)
 {
@@ -156,20 +158,9 @@ int16_t serialGetC (void)
     return (int16_t)data;
 }
 
-// "dummy" version of serialGetC
-static int16_t serialGetNull (void)
-{
-    return -1;
-}
-
 bool serialSuspendInput (bool suspend)
 {
-    if(suspend)
-        hal.stream.read = serialGetNull;
-    else if(rxbuf.backup)
-        memcpy(&rxbuf, &rxbackup, sizeof(stream_rx_buffer_t));
-
-    return rxbuf.tail != rxbuf.head;
+    return stream_rx_suspend(&rxbuf, suspend);
 }
 
 void USART1_IRQHandler (void)
@@ -184,12 +175,8 @@ void USART1_IRQHandler (void)
         } else {
             char data = USART1->DR;
             if(data == CMD_TOOL_ACK && !rxbuf.backup) {
-
-                memcpy(&rxbackup, &rxbuf, sizeof(stream_rx_buffer_t));
-                rxbuf.backup = true;
-                rxbuf.tail = rxbuf.head;
+                stream_rx_backup(&rxbuf);
                 hal.stream.read = serialGetC; // restore normal input
-
             } else if(!hal.stream.enqueue_realtime_command(data)) {     // Check and strip realtime commands,
                 rxbuf.data[rxbuf.head] = data;                          // if not add data to buffer
                 rxbuf.head = next_head;                                 // and update pointer
@@ -212,3 +199,5 @@ void USART1_IRQHandler (void)
             USART1->CR1 &= ~USART_CR1_TXEIE;    // disable UART TX interrupt
    }
 }
+
+#endif

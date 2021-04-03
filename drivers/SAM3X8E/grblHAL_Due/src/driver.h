@@ -1,9 +1,9 @@
 /*
   driver.h - driver code for Atmel SAM3X8E ARM processor
 
-  Part of GrblHAL
+  Part of grblHAL
 
-  Copyright (c) 2019-2020 Terje Io
+  Copyright (c) 2019-2021 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -105,6 +105,10 @@ void IRQUnRegister(int32_t IRQnum);
     #include "mega_2560_map.h"
 #elif defined(BOARD_PROTONEER)
     #include "protoneer_3.xx_map.h"
+#elif defined(BOARD_RADDS_16)
+    #include "radds_1.6_map.h"
+#elif defined(BOARD_MY_MACHINE)
+    #include "my_machine_map.h"
 #else
     #include "generic_map.h"
 #endif
@@ -118,7 +122,7 @@ void IRQUnRegister(int32_t IRQnum);
 
 // End configuration
 
-#if TRINAMIC_ENABLE
+#if TRINAMIC_ENABLE == 2130
 #include "tmc2130/trinamic.h"
 #endif
 
@@ -126,25 +130,9 @@ void IRQUnRegister(int32_t IRQnum);
 #include "spindle/huanyang.h"
 #endif
 
-#if TRINAMIC_ENABLE || KEYPAD_ENABLE
-
-#define DRIVER_SETTINGS
-
-typedef struct {
-#if TRINAMIC_ENABLE
-    trinamic_settings_t trinamic;
-#endif
-#if KEYPAD_ENABLE
-    jog_settings_t jog;
-#endif
-} driver_settings_t;
-
-extern driver_settings_t driver_settings;
-
-#endif
-
 #if EEPROM_ENABLE || KEYPAD_ENABLE || (TRINAMIC_ENABLE && TRINAMIC_I2C)
 
+#define I2C_ENABLE 1
 // Define I2C port/pins
 #define I2C_PERIPH  TWI0
 #define I2C_ID      ID_TWI0
@@ -156,7 +144,8 @@ extern driver_settings_t driver_settings;
 #define I2C_SCL_BIT (1<<I2C_SCL_PIN)
 
 #define I2C_CLOCK 100000
-
+#else
+#define I2C_ENABLE 0
 #endif
 
 // Simple sanity check...

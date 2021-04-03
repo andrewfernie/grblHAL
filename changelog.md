@@ -1,33 +1,161 @@
 ## grblHAL changelog
 
+2021-03-14:
+
+* Added support for tool change protocol to networking protocols using shared stream buffer.
+* Added `$S` system command for toggling single step mode, when enabled cycle start has to be issued after each block.
+* Some bug fixes.
+
+2021-02-07:
+
+* Added `#define BOARD_MY_MACHINE` option in _my_machine.h_ for building using _my_machine-map.c_, this for simpler handling of user defined pin mappings.  
+_my_machine-map.c_ is __*not*__ part of the distributed source and must by added to the project by the user before enabled, typically by copying an existing map file.
+* Added HAL layer on top of Trinamic driver low-level code. Unified Triniamic plugins into single plugin.  
+This is still work in progress, testers wanted.
+* Added core support for up to four limit switches per axis.  
+Added `$LEV` command for outputting report containing which limit or control switch(es) caused the last event.  
+Report format:  
+`[LASTEVENTS:<control signals>,<min>,<max>,<min2>,<max2)]`  
+Where `<control signals>` field may contain controls signal letters (`H`, `S` etc.) and the rest axis letters for the corresponding limit switches inputs.
+* More settings susbsystem changes and refactored $-system commands parser.  
+There are some API changes related to this that may affect user defined plugins.
+* Added $7 setting for option "Spindle off with zero speed".
+* Added `|FW:grblHAL` element to full real-time report requested by sending `0x87`. 
+* Simplified settings handling.
+* No longer sends any messages to networking streams on connect.
+* Added [driver](drivers/STM32F3xx) for STM32F303 based Blackpills.
+* Updated support for Trinamic TMC5160 drivers, currently for the SKR 1.x boards \(LPC176x driver\) - testing i progress.
+* Initial support for Trinamic TMC5160 drivers added, currently for the SKR 1.x boards \(LPC176x driver\) - not yet tested.
+* Added handling for motor fault signal to the core, similar to E-stop handling. Added new alarm and error code for this.
+* Changed to clear homed status on a soft reset only if machine was in motion. Added setting flag for always keeping homed status on soft reset to `$22` setting.  
+__NOTE:__ This change is experimental and might be changed or reverted. Please report any problems related to this.
+* Updated gcode parser \(grbl/gcode.c\) to use bitfields structs instead of bitfield variables.  
+Done to improve readability and for easier debugging.  
+Note that this is a major change and there is a non-zero risk that mistakes has been made.
+* Changed signature of user mcode validation function to use a bitfield union for value words available.  
+Removed the need for user mcode parameter words to have an associated value. This means that [user mcode](https://github.com/terjeio/grblHAL/tree/test/templates) implementations now must check this locally.  
+If no associated value is provided the corresponding value in the value struct is set to `NAN` (Not A Number) for floats and all bits set to 1 for integers.
+* Refactored Trinamic driver code, added initial support for TMC2209. Work in progress.
+* Removed the need to copy the core grbl and plugin code to the driver chosen, this is now kept in sync with the master Subversion repository automatically.
+* Added initial support for RADDS 1.6 board to SAM3X8E driver \(Arduino Due\). Untested!
+* Added C-axis support to iMXRT1062 driver \(Teensy 4.x\).  
+Untested and none of the current board maps has the needed pins defined.
+* Added alarm and error message for power on self-test \(POS\) failure.  
+If POS fails only $-commands are accepted.
+* Work in good progress for Trinamic TMC2209 driver support \(UART mode\).  
+Processor/board specific driver code has to be added for this, currently testing with STM32F446 and Nucleo-64 breakout board.
+* Renumbered setting groups for more logical sorting (by id).
+* Harmonized probing code across drivers for planned future extensions.
+* Added additional I/O support for the [Teensy 4.1 T41U5XBB board](https://github.com/phil-barrett/grbl-teensy-4) \(iMXRT1062 driver\), 3 outputs and 4 inputs available via `M62` - `M66`.  
+Not that the result from reading inputs with `M66` cannot be used in a gcode program in any meaningful way.
+* Fixed excessive step pulse jitter in STM32F4xx driver.
+* Added [more options](https://github.com/terjeio/grblHAL/wiki/Report-extensions#controller-information-extensions) to the `NEWOPT` tag in the extended `$I` report.
+* Error 7 is no longer issued on startup if non-volatile storage \(Flash/EEPROM/FRAM\) for settings is not available.
+* [Alarm substate](https://github.com/terjeio/grblHAL/wiki/Report-extensions#realtime-report) \(if available\) is always added to the real-time report if a [complete report](https://github.com/terjeio/grblHAL/wiki/For-sender-developers#single-character-real-time-commands) is requested by sending `0x87`.
+* Added input signal and handling for limit switches override.  
+The pin is pulled high and requires a normally open \(NO\) push switch for operation. When closed limit pins are excluded from the status report and alarm 12 will not be raised if a limit switch is asserted _on a soft reset_ when "Hard limits" and "Strict mode" is enabled with `$21`.
+This allows normal operation so that a manual pull-off can be done before e.g. homing the machine.  
+Currently only the iMXRT1062 \(Teensy 4.x\) driver has support for this, for now by reassigning the safety door input when this is not used for its intended purpose.  
+__NOTE:__ A override will _not_ affect handling of homing and limit switch events elsewhere.
+* Now adds `ODO` to `NEWOPT` tag values if odometer data is available.
+* Updated _[my_plugin.c](templates/my_plugin.c)_ [template](templates/README.md) with settings details for `$HELP` and `$ES`/`$EG` enumerations.
+* Settings/setting groups handling enhanced, moved some to plugins and added sorting (requres enough heap).
+* Removed external dependecies by adding driver source/USB blob to LPC176x driver.
+* Enhanced and improved ModBus support code for VFD spindle, added settings for baud rate and receive timeout.
+* Added support for enumeration of and help for driver and plugin provided settings and setting groups.
+* Moved board selection etc. to [CMakeLists.txt](drivers/ESP32/CMakeLists.txt) for [ESP32 driver](drivers/ESP32/README.md) for simpler configuration.
+* Fixed regression for VFD spindle code, should now be able to run tests.
+* Added build configurations for processor variants and Nucleo-64 boards for the [STM32F4xx driver](drivers/STM32F4xx/README.md).
+* Added initial board map file for [BTT SKR 1.4 Turbo board](https://www.bigtree-tech.com/products/btt-skr-v1-4-skr-v1-4-turbo-32-bit-control-board.html) to the [LPC176x driver](drivers/LPC1769/README.md) including build configuration for bootloader compatible executable.
+* Added polling of limit switches to the LPC176x driver, enabling hard limits is now possible.
+* Added `$` commands for getting details about alarm codes, error codes, settings and settings groups.  
+`$EA` - enumerate alarm codes.  
+`$EE` - enumerate error codes.  
+`$ES` - enumerate settings.  
+`$EG` - enumerate setting groups.  
+`$E*` - enumerate all above.  
+The output from these is intended for sender developers and can be used instead of loading this information from .csv files.  
+The settings enumeration contains additional information such as group assignment, datatype and format, value list for bitfields, min allowed value and max allowed value. 
+For now descriptions of the settings are not included.  
+__NOTE:__ This is a preview version, format and group codes may change for settings and setting groups.
+* Added `$HELP` command and `$$<n>` command for listing information about a specific setting.  
+`$HELP` on its own prints arguments that can be used with `$HELP`.  
+`$HELP Commands` - print `$` commands available with a short description.  
+`$HELP Settings` - print information about all available settings.  
+`$HELP <argument>` print information about settings from the setting group provided in `<argument>`. E.g. `$HELP Spindle` will print information about spindle settings.  
+__NOTE:__ do _NOT_ issue these commands from a sender MDI as the output may crash it, output is in plaintext and thus intended for use from a terminal only.
+__NOTE:__ Settings data format has been changed and settings will be reset to default on update. Backup and restore.
+* Moved `#define` values to settings for auto square failure distances:  
+`$347` - default value from `DUAL_AXIS_HOMING_FAIL_AXIS_LENGTH_PERCENT` \(5%\) in grbl/config.h.  
+`$348` - default value from `DUAL_AXIS_HOMING_FAIL_DISTANCE_MIN` \(2.5mm\) in grbl/config.h.  
+`$349` - default value from `DUAL_AXIS_HOMING_FAIL_DISTANCE_MAX` \(25mm\) in grbl/config.h.
+* Added settings and functionality for moving the second axis up to &plusmn;2mm after successful auto squaring to compensate for any switch alignment error.  
+The settings is per axis, `$17n` where `n` is the axis index: `n` = `0` -> X axis, `1` -> Y axis, ...  
+Note that settings values will only be reported for axes with dual motors installed and configured for auto squaring. 
+* Added setting `$345` for pull-off rate from tool length sensor used for tool change. Default value is 100mm/min.
+* Added setting flag to `$10` for enabling override of _Homing on startup required_ \(if enabled\) by a soft reset.
+* Blocked loophole where machine could be unlocked by issuing a single axis homing command when _Homing on startup required_ is enabled.  
+Alarm 11 will now be reissued until all axes configured for homing are homed.
+* Added software debounce for the safety door switch to STM32 drivers.
+* "Hardened" parking functionality. It should now tolerate a bouncy door switch and multiple closing/reopenings of the door during retract/restore.  
+__NOTE:__ Not extensively tested. Use with care!
+* Added `$I+` system command. This can be used when [compatibility level](https://github.com/terjeio/grblHAL/wiki/Compatibility-level) is > 0 to get the extended version including the current compatibility setting.
+* Added basic support for separating limit switches from homing switches in the core. If a driver does not handle separate inputs for these the core "connects" the homing switches to the limit switches in code.
+* Improved auto squaring. If a limit switch is engaged when homing starts the axis will be moved pull-off distance * 5 away from them. If still engaged homing will fail.  
+__NOTE:__ Auto squaring is currently only tested with a simulator. Use with care!
+
+Build 20201103:
+
+* Added data structures for spindle encoder/spindle sync to the core. Used by drivers supporting spindle sync.
+* Updated spindle sync code for MSP432 and added spindle sync capability to iMXRT1060 and STM32F4xx drivers.  
+__NOTE:__ Spindle sync support is still in alpha stage! The current code has only been tested with a simulator.
+* Fixed bug that could lead to settings storage area fail to reinitialize properly when corrupted.
+* Moved some symbols in preparation for adding $-settings for them.
+* Improved rewind capability (on `M2`) of SD card plugin. Added `$` command for dumping SD card file contents to output stream.
+
+Build 20201020:
+
+__NOTE:__ Settings data format has been changed and settings will be reset to default on update. Backup and restore.
+
+* Added support for STM32F446 based Nucleo-64 boards to STM32F4xx driver.
+* Fix for regression that set laser mode as default - `$32=1`. Check that this is correct after restoring settings from backup. 
+* Added new settings option `$341=4` for ignoring `M6` tool change command.
+* Bug fix for `M61Q0` - returned error previously.
+* Changed clearing of tool length offset reference on homing to be done only if relevant axis is/axes are homed.
+* Fixed check for running startup scripts on homing to check that all axes configured for homing are actually homed.
+* Changes to message display from `(MSG,..)` comments in gcode.  
+`(MSG,..)` strings will be sent back to the sender in sync with gcode execution.
+* Added `*` prefix to NVS storage type in `$I` report if buffered, e.g: `[NEWOPT:*EEPROM,ES,TC]`
+* Increased heap allocation for nearly all drivers.  
+Memory from heap is used for the NVS buffer and for temporary storage of `(MSG,..)` strings.  
+* Added option for adding substates to the `Run` state in the real time report to `$11` setting \(bit 11\).  
+If enabled `Run:2` will be reported when a probing motion is ongoing, this can be used by senders to provide a simple probe protection scheme.  
+* Another refactoring of the settings subsystem, this time for handling plugin settings.
+Plugins settings storage space is now dynamically allocated and handled locally by the plugin code, this allows user defined plugins to add settings too!
+Ten setting codes are reserved for user defined plugins.
+* Added template for [basic plugin with two settings](templates/README.md).
+* HAL pointers refactored for code readability, many moved to separate structures for each subsystem. Added typedefs.
+* Some minor bug fixes and other code readability improvements. Prepared for switch to 16-bit CRC for settings data validation.
+
 Build 20200923:
 
-* Added support for STM32F411 based Blackpill boards.
-
+* Added support for STM32F411 based Blackpill boards to STM32F4xx driver.
 * Initial changes to ESP32 driver to allow compilation with PlatformIO, added my_machine.h for this. Note that my_machine.h is not used if compiling with idf.py.
-
-* Added home position to `$#` ngc report, e.g. `[HOME,0.000,0.000,0.000:7]` - means all axes are homed. Position is reported in machine coordinates. `:7` in the example is an axis bitmap, the reported value is for which axes are homed: bit 0 is Z, 1 is X etc. `:0` = no axes homed.
-
+* Added home position to `$#` ngc report, e.g. `[HOME,0.000,0.000,0.000:7]` - means all axes are homed. Position is reported in machine coordinates. `:7` in the example is an axis bitfield, the reported value is for which axes are homed: bit 0 is Z, 1 is X etc. `:0` = no axes homed.
 * "Hardened" the new tool change functionality even more. Initial changes for multi-axis tool reference offset made.  
 An empy message will now be sent when tool change is complete, this to clear any tool change related message in the sender.
-
-* Added call to [weak](https://en.wikipedia.org/wiki/Weak_symbol) `my_plugin_init()` function at startup, name your [plugin](https://github.com/terjeio/grblHAL/tree/master/plugins) init function` my_plugin_init` and there is no need to change any grblHAL source files to bring it alive.  
+* Added call to [weak](https://en.wikipedia.org/wiki/Weak_symbol) `my_plugin_init()` function at startup, name your [plugin](https://github.com/terjeio/grblHAL/tree/master/plugins) init function `void my_plugin_init (void)` and there is no need to change any grblHAL source files to bring it alive.  
 Use this feature for your private plugin only, multiple public plugins using this name cannot coexist!
-
 * Some changes to improve code readability and added strict check for `G59.x` gcodes.
 
 Build 20200911:
 
 * Core refactored for better support for non-volatile storage. Some HAL entry points renamed for readability and moved to a new data structure.
-
 * Added plugin for axis odometers. This logs total distance traveled and machining time to EEPROM/FRAM.  
 [FRAM](https://www.electronics-notes.com/articles/electronic_components/semiconductor-ic-memory/fram-ferroelectric-ram-memory.php) is recommended for storage as it is faster and can sustain a larger number of write cycles. FRAM chips are sold in packages that is pin compatible with EEPROM.  
 __NOTE:__ Currently for review and for now only for the iMRXT1061 \(Teensy 4.x\) driver. It will _not_ be available in configurations that stores non-volatile data to flash.
-
 * "Hardening" of new [manual tool change](https://github.com/terjeio/grblHAL/wiki/Manual,-semi-automatic-and-automatic-tool-change) functionality. 
-
 * Improved auto squaring algorithm in core.
-
 * Enhanced some plugins so they can coexist.
 
 --- 
@@ -35,9 +163,7 @@ __NOTE:__ Currently for review and for now only for the iMRXT1061 \(Teensy 4.x\)
 Build 20200830:
 
 * Improved tool change functionality, a status report is forced on end of tool change to inform change is completed.
-
 * Fix for iMRXT1062 homing failure when serial over USB is used.
-
 * Standardized serial over USB `#define` macro across drivers to `USB_SERIAL_CDC`.
 
 ---

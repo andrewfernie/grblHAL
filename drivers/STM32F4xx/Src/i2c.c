@@ -1,7 +1,7 @@
 /*
   i2c.c - I2C support for EEPROM, keypad and Trinamic plugins
 
-  Part of GrblHAL driver for STM32F103C8
+  Part of grblHAL driver for STM32F4xx
 
   Copyright (c) 2018-2020 Terje Io
 
@@ -22,7 +22,7 @@
 #include <main.h>
 
 #include "i2c.h"
-#include "grbl.h"
+#include "grbl/hal.h"
 
 #if KEYPAD_ENABLE
 #include "keypad/keypad.h"
@@ -62,6 +62,9 @@ void i2c_init (void)
     __HAL_RCC_I2C1_CLK_ENABLE();
 
     HAL_I2C_Init(&i2c_port);
+
+    HAL_NVIC_EnableIRQ(I2C1_EV_IRQn);
+    HAL_NVIC_EnableIRQ(I2C1_ER_IRQn);
 #endif
 
 #if I2C_PORT == 2
@@ -75,14 +78,39 @@ void i2c_init (void)
     __HAL_RCC_I2C2_CLK_ENABLE();
 
     HAL_I2C_Init(&i2c_port);
+
+    HAL_NVIC_EnableIRQ(I2C2_EV_IRQn);
+    HAL_NVIC_EnableIRQ(I2C2_ER_IRQn);
 #endif
 }
+
+#if I2C_PORT == 1
+void I2C1_EV_IRQHandler(void)
+{
+  HAL_I2C_EV_IRQHandler(&i2c_port);
+}
+
+void I2C1_ER_IRQHandler(void)
+{
+  HAL_I2C_ER_IRQHandler(&i2c_port);
+}
+#else
+void I2C2_EV_IRQHandler(void)
+{
+  HAL_I2C_EV_IRQHandler(&i2c_port);
+}
+
+void I2C2_ER_IRQHandler(void)
+{
+  HAL_I2C_ER_IRQHandler(&i2c_port);
+}
+#endif
 
 #endif
 
 #if EEPROM_ENABLE
 
-void i2c_eeprom_transfer (i2c_eeprom_trans_t *i2c, bool read)
+nvs_transfer_result_t i2c_nvs_transfer (nvs_transfer_t *i2c, bool read)
 {
     while (HAL_I2C_GetState(&i2c_port) != HAL_I2C_STATE_READY);
 
@@ -97,6 +125,8 @@ void i2c_eeprom_transfer (i2c_eeprom_trans_t *i2c, bool read)
 #endif
     }
     i2c->data += i2c->count;
+
+    return NVS_TransferResult_OK;
 }
 
 #endif
@@ -111,10 +141,7 @@ void I2C_GetKeycode (uint32_t i2cAddr, keycode_callback_ptr callback)
     keycode = 0;
     keypad_callback = callback;
 
-    HAL_StatusTypeDef ret = HAL_I2C_Master_Receive_IT(&i2c_port, KEYPAD_I2CADDR << 1, &keycode, 1);
-
-    if(!ret)
-        ret = HAL_I2C_Master_Receive_IT(&i2c_port, KEYPAD_I2CADDR << 1, &keycode, 1);
+    HAL_I2C_Master_Receive_IT(&i2c_port, KEYPAD_I2CADDR << 1, &keycode, 1);
 }
 
 void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c)
